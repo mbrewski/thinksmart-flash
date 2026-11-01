@@ -51,13 +51,14 @@ VOICE_HOST = os.environ.get("VOICE_HOST", "VOICE_HOST")
 FACE_HOST = os.environ.get("FACE_HOST", VOICE_HOST)
 CLOCK_TZ = os.environ.get("CLOCK_TZ", os.environ.get("TZ", "UTC"))
 PORT = 1680
-URL = f"http://127.0.0.1:{PORT}/thinksmart-kiosk.html?v=34"
+URL = f"http://127.0.0.1:{PORT}/thinksmart-kiosk.html?v=35"
 TURN_URL = os.environ.get("TURN_URL", f"https://{VOICE_HOST}:8765/api/turn")
 RESET_URL = os.environ.get("RESET_URL", f"https://{VOICE_HOST}:8765/api/reset")
 REC_WAV = "/tmp/kiosk-rec.wav"
 BUSY = "/tmp/kiosk-busy"
 MIC = "alsa_input.platform-c051000.sound-card.HiFi__Microphone__source"
 HINT_IDLE = "say hey grok, or press to talk"
+HINT_LISTEN = "Listening"
 HINT_FOLLOWUP = "I'm listening"
 HINT_MUTE = "mic muted"
 SW_MICROPHONE_INSERT = 4
@@ -490,7 +491,7 @@ def _run_turn(auto: bool, followup: bool = False) -> dict:
         face="listen",
         status="listening",
         caption="",
-        hint=HINT_FOLLOWUP if followup else ("talk, then pause" if auto else "release to send"),
+        hint=HINT_LISTEN,
         busy=False,
     )
     pcm = _record_stream(

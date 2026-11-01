@@ -142,7 +142,7 @@
     if (!hintEl) return;
     if (hint !== undefined) hintEl.textContent = hint;
     else if (status === "ready") hintEl.textContent = "say hey grok, or press to talk";
-    else if (status === "listening") hintEl.textContent = localHold ? "release to send" : "talk, then pause";
+    else if (status === "listening") hintEl.textContent = "Listening";
     else hintEl.textContent = "";
   }
 
@@ -201,7 +201,7 @@
       player.pause();
       player.removeAttribute("src");
     } catch {}
-    setFace("listen", "listening", "");
+    setFace("listen", "listening", "", "Listening");
     try {
       const res = await fetch("/rec/start", { method: "POST" });
       const data = await res.json().catch(() => ({}));
