@@ -1,0 +1,30 @@
+# Secrets — never commit PSK, HA, or xAI keys
+secrets/wifi.env
+secrets/wpa_supplicant.conf
+secrets/*.env
+!secrets/*.example
+kiosk/kiosk.env
+.env
+*.pem
+*.key
+
+# Android dump and flash images (GitHub 100 MB limit)
+dump/
+images/*.img
+images/*.megatmp.*
+work/*.img
+*.img
+
+# Local EDL clone and venv (see README)
+tools/edl/
+tools/edl-venv/
+
+# Python / macOS / logs
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+.DS_Store
+*.log
+flash-*.log
