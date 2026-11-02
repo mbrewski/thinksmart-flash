@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""ThinkSmart volume keys → PipeWire sink (cage has no media-key handler)."""
+"""ThinkSmart volume keys → PipeWire sink (cage has no media-key handler).
+
+EVIOCGRAB on event0/event1 steals KEY_VOLUME* from cage. The face still opens
+event0 without grab for EVIOCGSW (mute slider). Grab does not block that ioctl
+on a second fd.
+"""
 import fcntl
 import os
 import re

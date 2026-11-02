@@ -5,8 +5,24 @@
 # the bootstrap image's pmOS_boot if vmlinuz or extlinux.conf is missing.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-DEBUGFS=/opt/homebrew/opt/e2fsprogs/sbin/debugfs
-E2LS=/opt/homebrew/opt/e2fsprogs/sbin/debugfs
+resolve_debugfs() {
+    local c
+    for c in debugfs /usr/sbin/debugfs /sbin/debugfs \
+        /opt/homebrew/opt/e2fsprogs/sbin/debugfs \
+        /usr/local/opt/e2fsprogs/sbin/debugfs; do
+        if command -v "$c" >/dev/null 2>&1; then
+            command -v "$c"
+            return 0
+        fi
+        if [ -x "$c" ]; then
+            echo "$c"
+            return 0
+        fi
+    done
+    echo "ERROR: debugfs not found (install e2fsprogs)" >&2
+    exit 1
+}
+DEBUGFS="$(resolve_debugfs)"
 IMG="${1:-$ROOT/images/thinksmart-flash.img}"
 BOOTSTRAP_P1="$ROOT/images/thinksmart-flash-bootstrap-boot.img"
 WORKDIR="$ROOT/work"

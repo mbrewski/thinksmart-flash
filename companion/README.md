@@ -7,9 +7,9 @@
 | `voice-assistant` | HTTPS `:8765` | Grok Voice S2S, STT, optional HA tools |
 | Bloub Node streamer | HTTP `:8766` | Cream Grok-bot JPEGs (`sharp`, ~12 fps) |
 
-UFW: allow `8765/tcp` and `8766/tcp` from `LAN_CIDR` only. Do not publish them.
+UFW: allow `8765/tcp` and `8766/tcp` from `LAN_CIDR` only. Do not publish them. The panel uses `curl -sk` (unverified companion TLS) and WebKit with sandbox off; keep those ports LAN-only.
 
-Set `VOICE_HOST` and `FACE_HOST` in `kiosk/kiosk.env` to that box's IPv4.
+Set `VOICE_HOST` and `FACE_HOST` in `kiosk/kiosk.env` to that box's IPv4. Never put `XAI_API_KEY` in `kiosk.env`.
 
 ## voice-assistant
 

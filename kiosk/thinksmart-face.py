@@ -8,6 +8,7 @@ import http.server
 import io
 import json
 import os
+import re
 import signal
 import http.client
 import subprocess
@@ -47,8 +48,23 @@ def _load_env_file(path: str) -> None:
 _load_env_file("/etc/thinksmart-kiosk.env")
 _load_env_file(os.path.join(HERE, "kiosk.env"))
 
-VOICE_HOST = os.environ.get("VOICE_HOST", "VOICE_HOST")
-FACE_HOST = os.environ.get("FACE_HOST", VOICE_HOST)
+
+def _require_host(name: str) -> str:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw or raw in ("VOICE_HOST", "FACE_HOST", "192.0.2.10"):
+        raise SystemExit(
+            f"{name} is unset or still the example placeholder; "
+            "set it in /etc/thinksmart-kiosk.env or kiosk.env"
+        )
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", raw):
+        raise SystemExit(f"{name} is not a hostname or IPv4: {raw!r}")
+    return raw
+
+
+VOICE_HOST = _require_host("VOICE_HOST")
+FACE_HOST = os.environ.get("FACE_HOST", "").strip() or VOICE_HOST
+if FACE_HOST in ("FACE_HOST", "192.0.2.10"):
+    FACE_HOST = VOICE_HOST
 CLOCK_TZ = os.environ.get("CLOCK_TZ", os.environ.get("TZ", "UTC"))
 PORT = 1680
 URL = f"http://127.0.0.1:{PORT}/thinksmart-kiosk.html?v=36"
@@ -485,50 +501,69 @@ def _run_turn(auto: bool, followup: bool = False) -> dict:
     global _mode, _result, _followup_depth
     _busy_on()
     _speaker_mute()
-    if followup:
-        time.sleep(0.25)
-    _set_state(
-        face="listen",
-        status="listening",
-        caption="",
-        hint=HINT_LISTEN,
-        busy=False,
-    )
-    pcm = _record_stream(
-        auto,
-        FOLLOWUP_NO_SPEECH_MS if followup else NO_SPEECH_MS,
-        speech_rms=FOLLOWUP_SPEECH_RMS if followup else SPEECH_RMS,
-        min_speech_frames=FOLLOWUP_SPEECH_FRAMES if followup else 1,
-    )
-    _speaker_on()
-    if _mic_muted:
-        _set_state(face="sleep", status="muted", caption="", hint=HINT_MUTE, busy=False)
+    try:
+        if followup:
+            time.sleep(0.25)
+        _set_state(
+            face="listen",
+            status="listening",
+            caption="",
+            hint=HINT_LISTEN,
+            busy=False,
+        )
+        pcm = _record_stream(
+            auto,
+            FOLLOWUP_NO_SPEECH_MS if followup else NO_SPEECH_MS,
+            speech_rms=FOLLOWUP_SPEECH_RMS if followup else SPEECH_RMS,
+            min_speech_frames=FOLLOWUP_SPEECH_FRAMES if followup else 1,
+        )
+        _speaker_on()
+        if _mic_muted:
+            _set_state(face="sleep", status="muted", caption="", hint=HINT_MUTE, busy=False)
+            with _lock:
+                _mode = "idle"
+                _result = {}
+            _followup_depth = 0
+            _busy_off()
+            return {}
+        if followup and len(pcm) < MIN_CMD:
+            _set_state(face="idle", status="ready", caption="", hint=HINT_IDLE, busy=False)
+            with _lock:
+                _mode = "idle"
+                _result = {}
+            _followup_depth = 0
+            _busy_off()
+            return {}
+        _set_state(face="idle", status="thinking", hint="", busy=True)
         with _lock:
-            _mode = "idle"
-            _result = {}
-        _followup_depth = 0
-        _busy_off()
-        return {}
-    if followup and len(pcm) < MIN_CMD:
-        _set_state(face="idle", status="ready", caption="", hint=HINT_IDLE, busy=False)
-        with _lock:
-            _mode = "idle"
-            _result = {}
-        _followup_depth = 0
-        _busy_off()
-        return {}
-    _set_state(face="idle", status="thinking", hint="", busy=True)
-    with _lock:
-        _mode = "busy"
-    data = _post_turn(pcm)
-    reply = data.get("reply") or ""
-    heard = (data.get("transcript") or "").strip()
-    if followup and not heard:
+            _mode = "busy"
+        data = _post_turn(pcm)
+        reply = data.get("reply") or ""
+        heard = (data.get("transcript") or "").strip()
+        if followup and not heard:
+            will_follow = _followup_depth < MAX_FOLLOWUPS
+            _set_state(
+                face="idle",
+                status="ready",
+                caption="",
+                hint=HINT_FOLLOWUP if will_follow else HINT_IDLE,
+                busy=False,
+            )
+            with _lock:
+                _mode = "idle"
+                _result = data
+            if will_follow:
+                _followup_depth += 1
+                _schedule_followup()
+            else:
+                _followup_depth = 0
+                _busy_off()
+            return data
         will_follow = _followup_depth < MAX_FOLLOWUPS
         _set_state(
             face="idle",
-            status="ready",
-            caption="",
+            status=heard or "ready",
+            caption=reply,
             hint=HINT_FOLLOWUP if will_follow else HINT_IDLE,
             busy=False,
         )
@@ -542,24 +577,16 @@ def _run_turn(auto: bool, followup: bool = False) -> dict:
             _followup_depth = 0
             _busy_off()
         return data
-    will_follow = _followup_depth < MAX_FOLLOWUPS
-    _set_state(
-        face="idle",
-        status=heard or "ready",
-        caption=reply,
-        hint=HINT_FOLLOWUP if will_follow else HINT_IDLE,
-        busy=False,
-    )
-    with _lock:
-        _mode = "idle"
-        _result = data
-    if will_follow:
-        _followup_depth += 1
-        _schedule_followup()
-    else:
+    except Exception:
         _followup_depth = 0
+        with _lock:
+            _mode = "idle"
+            _result = {}
+        _set_state(face="idle", status="ready", caption="", hint=HINT_IDLE, busy=False)
         _busy_off()
-    return data
+        raise
+    finally:
+        _speaker_on()
 
 
 def _start_rec(auto: bool, followup: bool = False) -> bool:

@@ -41,7 +41,19 @@ _load_env_file(os.path.join(HERE, "kiosk.env"))
 
 MIC = "alsa_input.platform-c051000.sound-card.HiFi__Microphone__source"
 WAKE_URL = "http://127.0.0.1:1680/wake"
-VOICE_HOST = os.environ.get("VOICE_HOST", "VOICE_HOST")
+def _require_host(name: str) -> str:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw or raw in ("VOICE_HOST", "192.0.2.10"):
+        raise SystemExit(
+            f"{name} is unset or still the example placeholder; "
+            "set it in /etc/thinksmart-kiosk.env or kiosk.env"
+        )
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", raw):
+        raise SystemExit(f"{name} is not a hostname or IPv4: {raw!r}")
+    return raw
+
+
+VOICE_HOST = _require_host("VOICE_HOST")
 STT_URL = os.environ.get("STT_URL", f"https://{VOICE_HOST}:8765/api/transcribe")
 BUSY = "/tmp/kiosk-busy"
 LOG = "/tmp/kiosk-wake.log"
@@ -329,7 +341,8 @@ def main() -> None:
                     now = time.time()
                     if hit and now - last_hit >= 2.0:
                         last_hit = now
-                        _log(f"kws {hit} (stt still required)")
+                        _log(f"kws {hit}")
+                        _notify(hit)
                         stream = spotter.create_stream()
                 gate.push(pcm)
         except Exception as e:

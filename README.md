@@ -164,7 +164,7 @@ You do **not** need fastboot flashing, Magisk, QFIL (except as a last-resort sto
 | GTK 4 + WebKitGTK 6 | `libwebkitgtk-6.0`. Chromium snap is too big for a ~6.4 G root. |
 | PipeWire + WirePlumber | TAS sink `alsa_output.platform-c051000.sound-card.HiFi__Speaker__sink`. |
 | `pw-record` / `pw-play` / `paplay` / `amixer` | Capture 48 kHz s32, play 48 kHz s16. |
-| Python 3 (system) | `thinksmart-face.py` (Gtk). Separate venv only for optional Sherpa KWS. |
+| Python 3 (system) | `thinksmart-face.py` (Gtk) and `thinksmart-wake.py`. Optional venv site-packages only for Sherpa KWS. |
 
 **Do not `apt full-upgrade`.** It has stripped Plasma/WebKit/PipeWire mixes on neon leftovers.
 
@@ -394,7 +394,7 @@ pkill -f '^python3 /usr/local/share/thinksmart-kiosk/thinksmart-face.py'
 curl http://127.0.0.1:1680/state
 ```
 
-An old `/usr/local/share/xiaozhi-kiosk` path can stay as a symlink to the new directory. Wake word: `thinksmart-wake.py` RMS-gates `pw-record`, POSTs `/api/transcribe` on the companion, regex for hey/ok grok, then `POST http://127.0.0.1:1680/wake`. Do not install a native 小智 client. This kiosk talks HTTP to `VOICE_HOST:8765`.
+An old `/usr/local/share/xiaozhi-kiosk` path can stay as a symlink to the new directory. Wake word: `thinksmart-wake.py` RMS-gates `pw-record`. If Sherpa KWS is installed it POSTs `/wake` on a spotter hit; otherwise it POSTs `/api/transcribe` on the companion, regex for hey/ok grok, then `POST http://127.0.0.1:1680/wake`. The wake unit runs `/usr/bin/python3`. Do not install a native 小智 client. This kiosk talks HTTP to `VOICE_HOST:8765`. Face and wake exit if `VOICE_HOST` is missing or still the `192.0.2.10` example.
 
 Cache-bust: bump `thinksmart-kiosk.html?v=N` in `thinksmart-face.py` and `thinksmart-kiosk.js?v=` in the HTML.
 
@@ -427,7 +427,7 @@ Grok Voice tools (in `voice_assistant/grok_voice.py`):
 sudo ufw allow from LAN_CIDR to any port 8765 proto tcp
 ```
 
-TLS: the panel uses `curl -sk` to the companion cert. Browsers that open the companion UI need to trust `/cert.pem`.
+TLS: the panel uses `curl -sk` to the companion cert (no verification). Keep `:8765`/`:8766` UFW'd to `LAN_CIDR`. `kiosk.env` must never hold `XAI_API_KEY`. Browsers that open the companion UI need to trust `/cert.pem`.
 
 ### 7. Bloub streamer
 
