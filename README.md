@@ -2,7 +2,9 @@
 
 Turn a Lenovo **ThinkSmart View (CD-18781Y)** into a wall-mounted English Grok voice panel: hold-to-talk or “hey grok,” Eve speech-to-speech, optional Home Assistant, and a streamed Grok-bot face.
 
-This tree is a **hybrid 6.12 Ubuntu kiosk**, not the stock Plasma Mobile desktop and not [justhalfbit/thinksmart-ubuntu-image](https://github.com/justhalfbit/thinksmart-ubuntu-image). Those matter only as flash sources or alternatives (see [Other images](#other-images)).
+This tree is **flash notes plus the panel kiosk**: hybrid 6.12 Ubuntu, cage UI, TAS speaker route, WirePlumber overlay, SSH deploy. It is not the stock Plasma Mobile desktop and not [justhalfbit/thinksmart-ubuntu-image](https://github.com/justhalfbit/thinksmart-ubuntu-image). Those matter only as flash sources or alternatives (see [Other images](#other-images)).
+
+`voice-assistant` and the Bloub Node streamer run on a companion PC and **are not in this repository**. Panel HTTP contracts for those two programs are in [`companion/README.md`](companion/README.md).
 
 ```
  ThinkSmart 800×1280              Companion PC (LAN)                 Cloud / house
@@ -64,6 +66,8 @@ Do not publish `:8765`, `:8766`, Home Assistant, or leftover 小智 ports `16688
 9. [Other images](#other-images)
 10. [Credits](#credits)
 
+On-disk layout that GitHub ships: `README.md`, `kiosk/` (UI, audio route, overlay, `install-panel.sh`), `tools/edl.sh`, `tools/deploy-kiosk.sh`, `tools/loaders/`, `companion/README.md`, `repair-ubuntu-boot.sh`, `wait-edl.py`. Flash images, `dump/`, `tools/edl`, and `tools/edl-venv` stay local.
+
 ---
 
 ## What you get
@@ -77,11 +81,12 @@ On the glass:
 - After Eve finishes speaking, a **15 second** “I’m listening” window so you can keep talking without a new wake.
 - Hardware mic slider left → Bloub **sleep** pose and hint “mic muted”.
 
-On the companion PC:
+On the companion PC (separate trees; see [`companion/README.md`](companion/README.md)):
 
 - HTTPS `voice-assistant` on `:8765`.
 - `POST /api/turn` runs **Grok Voice** (`grok-voice-latest`, voice Eve): 16 kHz PCM in, 24 kHz WAV out.
 - Tools: native `web_search`, optional Tavily MCP, optional **local** Home Assistant functions (`ha_turn_on`, `ha_turn_off`, `ha_status`) so HA stays on the LAN.
+- Node + `sharp` Bloub streamer on `:8766`.
 
 ---
 
@@ -129,7 +134,7 @@ Confirm in EDL: `edl printgpt` reports CPU `APQ8053` and `total_blocks:15269888`
 
 | Piece | Why |
 | --- | --- |
-| [bkerler/edl](https://github.com/bkerler/edl) | Sahara/Firehose. This repo vendors it under `tools/edl/` with venv `tools/edl-venv`. |
+| [bkerler/edl](https://github.com/bkerler/edl) | Sahara/Firehose. `./tools/edl.sh` clones it to `tools/edl/` and builds `tools/edl-venv` on first run. |
 | Firehose loader | `tools/edl/Loaders/lenovo_motorola/000660e160008000_b9eca30dfea46934_fhprg_peek.bin` (HWID `0x000660e160008000`). |
 | [rickx/ubuntu-thinksmart](https://github.com/rickx/ubuntu-thinksmart) | Ubuntu 24.04 port, `FLASHING.md`, `prebuilt/lk2nd.img`, bootstrap scripts. Clone beside this repo if you need `apply-ubuntu-gpt.sh`. |
 | Images | Rickx bootstrap and Plasma 6 Ubuntu MEGA image, renamed here to `images/thinksmart-flash-bootstrap.img` and `images/thinksmart-flash.img` (~6.8 GiB). |
@@ -142,11 +147,11 @@ You do **not** need fastboot flashing, Magisk, QFIL (except as a last-resort sto
 
 | Piece | Why |
 | --- | --- |
-| `voice-assistant` | FastAPI HTTPS `:8765`, Grok Voice client, optional HA MCP client. |
+| `voice-assistant` | FastAPI HTTPS `:8765`. **Not in this repo.** |
 | Python venv | `httpx`, `websockets`, `numpy`, `soundfile`, Kokoro fallback TTS. |
 | `XAI_API_KEY` | `0600` `.env`. Never in git or this README. |
 | Tavily key | Optional; Voice also has native `web_search`. |
-| Node.js 22 + `sharp` | Bloub MJPEG streamer on `:8766`. |
+| Node.js 22 + `sharp` | Bloub JPEG/MJPEG streamer on `:8766`. **Not in this repo.** |
 | UFW (or equivalent) | Allow `:8765` and `:8766` from `LAN_CIDR` only. |
 
 ### Panel (after Ubuntu is up)
@@ -196,7 +201,7 @@ justhalfbit’s public image still ships **unchanged 6.19.5**. Do not flash it o
 
 **Fix:**
 
-- Rewrite `speaker-route.sh` to **amixer-only** (no `/dev/mem`).
+- Install `kiosk/speaker-route.sh` (**amixer-only**, no `/dev/mem`).
 - Mask `pmos-audio-route.service` and `i2c1-pinctrl-fix.service` on the kernel cmdline **and** with `/dev/null` unit symlinks.
 - Masked boot image: `work/thinksmart-flash-boot-612-mask.img`. EDL write of **boot only** (not the 6.8 GB system) is `edl ws` to physical partition 0 **sector 925696**.
 - Keep `qup-i2c-pinctrl-fix.service` (sysfs unbind/rebind of `78b5000.i2c`); that one is not the MMIO poke.
@@ -223,7 +228,7 @@ TAS needs ~500–700 ms after Hi-Z to reload DSP firmware. Short UI clicks are s
 
 If WirePlumber matches the wrong node name, the sink stays **s24-32le** and sounds nearly dead. Volume keys then get cranked to 200–300% and **clip** once the format is corrected.
 
-**Fix:** overlay `/etc/wireplumber/main.lua.d/99-cd18781y-alsa.lua` so the node is `HiFi__Speaker__sink` at **S16LE 48 kHz 2ch**. `api.alsa.headroom` 8192. Volume daemon cap **1.00** (s16 TAS clips above digital 1.0). Keys: `thinksmart-volume.py`, amp stays 50.
+**Fix:** overlay `kiosk/99-cd18781y-alsa.lua` → `/etc/wireplumber/main.lua.d/99-cd18781y-alsa.lua` so the node is `HiFi__Speaker__sink` at **S16LE 48 kHz 2ch**. `api.alsa.headroom` 8192. Volume daemon cap **1.00** (s16 TAS clips above digital 1.0). Keys: `thinksmart-volume.py`, amp stays 50.
 
 ### 7. DSI / KWin DPMS
 
@@ -269,21 +274,19 @@ Flashing **wipes** Kingston Android 8.1 and whatever was on the eMMC. Bootloader
 
 ```bash
 cd /path/to/thinksmart-flash
-git clone --depth 1 https://github.com/bkerler/edl.git tools/edl
-python3 -m venv tools/edl-venv
-tools/edl-venv/bin/pip install -r tools/edl/requirements.txt
-mkdir -p tools/edl/Loaders/lenovo_motorola
-cp tools/loaders/000660e160008000_b9eca30dfea46934_fhprg_peek.bin \
-   tools/edl/Loaders/lenovo_motorola/
+./tools/edl.sh --help
 ```
+
+First run clones [bkerler/edl](https://github.com/bkerler/edl) into `tools/edl`, creates `tools/edl-venv`, installs `tools/edl/requirements.txt`, and copies the Firehose loader from `tools/loaders/`. Both `tools/edl` and `tools/edl-venv` are gitignored.
 
 This GitHub tree omits:
 
 - `dump/` — your EDL Android rollback (required before the first flash)
 - `images/*.img` — rickx bootstrap and Plasma 6 Ubuntu (GitHub 100 MB limit)
 - `work/thinksmart-flash-boot-612*.img` — hybrid boot partitions (~249 MB)
-- `tools/edl` / `tools/edl-venv` — clone and venv above
+- `tools/edl` / `tools/edl-venv` — created by `tools/edl.sh`
 - `secrets/wifi.env` — copy from `secrets/wifi.env.example`
+- `voice-assistant` and the Bloub streamer — companion PC, see [`companion/README.md`](companion/README.md)
 
 Put images in `images/`:
 
@@ -352,12 +355,12 @@ sudo timedatectl set-timezone "$TZ"
 
 ### 4. Audio on the panel
 
-After SSH:
+`tools/deploy-kiosk.sh` (next step) installs `kiosk/99-cd18781y-alsa.lua` and `kiosk/speaker-route.sh`. After SSH, confirm the kernel and codec, then test playback:
 
 1. Confirm `uname -r` is `6.12.0-postmarketos-qcom-msm8953` and `lsmod` includes `snd_soc_tas5782m_dbg`.
-2. Install a WirePlumber overlay so the sink is S16LE 48 kHz `HiFi__Speaker__sink`.
-3. Install `/usr/local/bin/speaker-route.sh` (QUAT on, PRI off, amp 50, no `devmem`).
-4. Put `ubuntu` in groups `audio` and `input`.
+2. Overlay `/etc/wireplumber/main.lua.d/99-cd18781y-alsa.lua` — S16LE 48 kHz `HiFi__Speaker__sink`.
+3. `/usr/local/bin/speaker-route.sh` — QUAT on, PRI off, amp 50, no `devmem`.
+4. `ubuntu` in groups `audio` and `input`.
 5. Test as `ubuntu` (not root) with the session Pulse env:
 
 ```bash
@@ -376,21 +379,22 @@ pw-record --rate=48000 --channels=2 --format=s32 --target \
 
 ### 5. Cage kiosk (drop Plasma for RAM)
 
-1. Install `cage`, `python3-gi`, GTK 4, `libwebkitgtk-6.0`.
-2. Edit `TURN_URL`, `RESET_URL`, `FACE_STREAM`, `STT_URL`, and `TZ` as in [Configure before you copy files](#configure-before-you-copy-files).
-3. Copy `kiosk/` to `/usr/local/share/thinksmart-kiosk/` (`thinksmart-face.py`, `thinksmart-kiosk.html`, `thinksmart-kiosk.js`, `faces/`). An old `/usr/local/share/xiaozhi-kiosk` path can stay as a symlink to that directory.
-4. Install `kiosk/thinksmart-kiosk.desktop` into `/usr/share/wayland-sessions/` and set `Session=thinksmart-kiosk.desktop` in `/etc/sddm.conf` and `/etc/sddm.conf.d/99-thinksmart-autologin.conf`. Exec is `cage -s /usr/local/share/thinksmart-kiosk/thinksmart-face.py`. `kiosk/thinksmart-kiosk.service` is a template only; live path is SDDM, so a `pkill` of cage kills the session.
-5. Volume keys: install `thinksmart-volume.py` to `/usr/local/bin/` + `thinksmart-volume.service` (`User=ubuntu`, groups `input audio`).
-6. Wake word: `thinksmart-wake.py` + `thinksmart-wake.service` (venv under the kiosk dir, `MemoryMax=350M`). It `pw-record`s, RMS-gates, POSTs `/api/transcribe` on the companion, regex for hey/ok grok, then `POST http://127.0.0.1:1680/wake`.
-7. Do not install a native 小智 client. This kiosk talks HTTP to `VOICE_HOST:8765`, not a hub websocket.
+Edit `kiosk/kiosk.env` as in [Configure before you copy files](#configure-before-you-copy-files), then from the flash host:
 
-Deploy over SSH:
+```bash
+./tools/deploy-kiosk.sh ubuntu@PANEL_IPV4
+```
 
-```text
-SFTP kiosk files → /tmp → sudo cp into /usr/local/share/thinksmart-kiosk
+That tars `kiosk/` over SSH and runs `kiosk/install-panel.sh` as root on the panel: cage + GTK4/WebKit packages, files under `/usr/local/share/thinksmart-kiosk/`, WirePlumber overlay, `speaker-route.sh`, volume and wake units, SDDM session `thinksmart-kiosk.desktop`, groups `audio`/`input`, and masks `pmos-audio-route.service` / `i2c1-pinctrl-fix.service`.
+
+Live compositor path is SDDM → cage (`Exec=/usr/bin/cage -s …/thinksmart-face.py`). `kiosk/thinksmart-kiosk.service` is a template only; a `pkill` of cage kills the session. Restart the face with:
+
+```bash
 pkill -f '^python3 /usr/local/share/thinksmart-kiosk/thinksmart-face.py'
 curl http://127.0.0.1:1680/state
 ```
+
+An old `/usr/local/share/xiaozhi-kiosk` path can stay as a symlink to the new directory. Wake word: `thinksmart-wake.py` RMS-gates `pw-record`, POSTs `/api/transcribe` on the companion, regex for hey/ok grok, then `POST http://127.0.0.1:1680/wake`. Do not install a native 小智 client. This kiosk talks HTTP to `VOICE_HOST:8765`.
 
 Cache-bust: bump `thinksmart-kiosk.html?v=N` in `thinksmart-face.py` and `thinksmart-kiosk.js?v=` in the HTML.
 
@@ -398,7 +402,7 @@ The kiosk polls `SW_MICROPHONE_INSERT` on `/dev/input/event0`. Slider left → f
 
 ### 6. Companion voice-assistant
 
-On `VOICE_HOST`:
+This program is **not in this repository**. On `VOICE_HOST`, run your `voice-assistant` tree so it matches [`companion/README.md`](companion/README.md):
 
 ```bash
 cd /path/to/voice-assistant
@@ -427,7 +431,7 @@ TLS: the panel uses `curl -sk` to the companion cert. Browsers that open the com
 
 ### 7. Bloub streamer
 
-On `FACE_HOST`, bind **only the LAN NIC** (`BLOUB_BIND` / `BLOUB_PORT`, default `:8766`):
+This program is **not in this repository**. On `FACE_HOST`, run a Node + `sharp` streamer that matches [`companion/README.md`](companion/README.md). Bind **only the LAN NIC** (`BLOUB_BIND` / `BLOUB_PORT`, default `:8766`):
 
 - HTTP `GET /face.jpg` (single baseline JPEG), `GET /face.mjpeg`, `GET|POST /face?name=`, `GET /health`
 - 12 fps JPEG ~720 px, cream `#eceae6` on paper `#1a1a1a`
