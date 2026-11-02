@@ -236,6 +236,8 @@ Black glass with SSH still up is usually KWin DPMS: `card0-DSI-1` `dpms=Off`. Wr
 
 **Fix:** kiosk uses **cage**, not KWin. If you still have Plasma: `kscreen-doctor --dpms on` as `ubuntu` with the Wayland env. Idle blanker must not write brightness 0. Mask `idle-blanker.service` in both the user wants and `/etc/systemd/user/graphical-session.target.wants`. PowerDevil “turn off” `0` means immediate; use `-- -1` for never.
 
+The kiosk paints a black overlay after **60 s** idle (`SCREEN_IDLE_SEC`). A tap or Hey Grok turns the face back on. That does **not** write backlight 0 or DSI DPMS.
+
 ### 8. Capture path
 
 - Pulse/ffmpeg **16 kHz s16** from the HiFi mic **hashes** the DMICs; Grok STT returns empty.

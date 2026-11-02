@@ -5,6 +5,7 @@
   const hintEl = document.getElementById("hint");
   const timeEl = document.getElementById("clock-time");
   const dateEl = document.getElementById("clock-date");
+  const blankEl = document.getElementById("blank");
   const player = document.getElementById("player");
 
   let clockTz = "UTC";
@@ -57,6 +58,7 @@
 
   let rec = false;
   let busy = false;
+  let screenBlank = false;
   let startedAt = 0;
   let audioCtx = null;
   let localHold = false;
@@ -131,8 +133,20 @@
     else hintEl.textContent = "";
   }
 
+  function setBlank(on) {
+    screenBlank = !!on;
+    if (blankEl) blankEl.classList.toggle("on", screenBlank);
+  }
+
+  async function unblank() {
+    setBlank(false);
+    try {
+      await fetch("/unblank", { method: "POST" });
+    } catch {}
+  }
+
   async function pollJpg() {
-    if (polling) return;
+    if (polling || screenBlank) return;
     polling = true;
     try {
       const res = await fetch("/bot.jpg?r=" + Date.now(), { cache: "no-store" });
@@ -182,7 +196,7 @@
   }
 
   async function startRec() {
-    if (busy || rec || faceMode === "sleep") return;
+    if (screenBlank || busy || rec || faceMode === "sleep") return;
     rec = true;
     localHold = true;
     startedAt = Date.now();
@@ -229,6 +243,10 @@
   document.body.addEventListener("pointerdown", (ev) => {
     if (!ev.isPrimary) return;
     ev.preventDefault();
+    if (screenBlank) {
+      unblank();
+      return;
+    }
     try {
       document.body.setPointerCapture(ev.pointerId);
     } catch {}
@@ -254,6 +272,7 @@
     try {
       const s = await fetch("/state").then((r) => r.json());
       applyTz(s.tz);
+      setBlank(!!s.blank);
       setFace(s.face || "idle", s.status || "", s.caption, s.hint);
       busy = !!s.busy;
     } catch {}

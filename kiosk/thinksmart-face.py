@@ -67,7 +67,7 @@ if FACE_HOST in ("FACE_HOST", "192.0.2.10"):
     FACE_HOST = VOICE_HOST
 CLOCK_TZ = os.environ.get("CLOCK_TZ", os.environ.get("TZ", "UTC"))
 PORT = 1680
-URL = f"http://127.0.0.1:{PORT}/thinksmart-kiosk.html?v=36"
+URL = f"http://127.0.0.1:{PORT}/thinksmart-kiosk.html?v=37"
 TURN_URL = os.environ.get("TURN_URL", f"https://{VOICE_HOST}:8765/api/turn")
 RESET_URL = os.environ.get("RESET_URL", f"https://{VOICE_HOST}:8765/api/reset")
 REC_WAV = "/tmp/kiosk-rec.wav"
@@ -93,6 +93,10 @@ MAX_FOLLOWUPS = 10
 SPEECH_RMS = 1400
 FOLLOWUP_SPEECH_RMS = 1800
 FOLLOWUP_SPEECH_FRAMES = 2
+try:
+    BLANK_SEC = max(5, int(os.environ.get("SCREEN_IDLE_SEC", "60")))
+except ValueError:
+    BLANK_SEC = 60
 
 _lock = threading.Lock()
 _mode = "idle"
@@ -100,6 +104,7 @@ _stop = threading.Event()
 _result = {}
 _followup_depth = 0
 _mic_muted = False
+_last_activity = time.time()
 _state = {
     "face": "idle",
     "status": "ready",
@@ -107,6 +112,7 @@ _state = {
     "hint": HINT_IDLE,
     "busy": False,
     "tz": CLOCK_TZ,
+    "blank": False,
 }
 
 
@@ -196,6 +202,29 @@ def _mute_watch() -> None:
         except Exception as e:
             _log(f"mic-mute watch {e}")
         time.sleep(0.25)
+
+
+def _poke() -> None:
+    """Keep the glass on; first tap or wakeword after idle calls this."""
+    global _last_activity
+    with _lock:
+        _last_activity = time.time()
+        was = bool(_state.get("blank"))
+        _state["blank"] = False
+    if was:
+        _log("screen on")
+
+
+def _blank_watch() -> None:
+    while True:
+        time.sleep(1)
+        with _lock:
+            if _mode != "idle" or _state.get("busy") or _state.get("blank"):
+                continue
+            if time.time() - _last_activity < BLANK_SEC:
+                continue
+            _state["blank"] = True
+        _log("screen off")
 
 
 def _busy_on() -> None:
@@ -587,10 +616,12 @@ def _run_turn(auto: bool, followup: bool = False) -> dict:
         raise
     finally:
         _speaker_on()
+        _poke()
 
 
 def _start_rec(auto: bool, followup: bool = False) -> bool:
     global _mode, _followup_depth
+    _poke()
     if _mic_muted:
         return False
     with _lock:
@@ -658,6 +689,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/wake"):
             ok = _start_rec(True)
             self._json(200 if ok else 409, {"ok": ok})
+            return
+        if self.path.startswith("/unblank"):
+            _poke()
+            self._json(200, {"ok": True})
             return
         self.send_error(404)
 
@@ -782,6 +817,7 @@ if __name__ == "__main__":
     _speaker_on()
     _apply_mute(_read_mic_muted())
     threading.Thread(target=_mute_watch, daemon=True).start()
+    threading.Thread(target=_blank_watch, daemon=True).start()
     threading.Thread(target=_serve, daemon=True).start()
     subprocess.Popen(
         ["curl", "-sk", "-X", "POST", RESET_URL],
