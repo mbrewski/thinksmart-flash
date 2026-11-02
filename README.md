@@ -12,7 +12,7 @@ This tree is a **hybrid 6.12 Ubuntu kiosk**, not the stock Plasma Mobile desktop
  │ 127.0.0.1:1680          ├─────►│  web_search, optional    ├─────►│             │
  │ hold / hey grok         │      │  Tavily + HA functions   │      └─────────────┘
  │ pw-play TAS 48 kHz      │◄─────┤                          │
- │ img /bot.mjpeg          │      └────────────┬─────────────┘      ┌─────────────┐
+ │ img /bot.jpg            │      └────────────┬─────────────┘      ┌─────────────┐
  └──────────▲──────────────┘                   │ LAN only           │ Home        │
             │ MJPEG proxy                      ▼                    │ Assistant   │
             │                     bloub-stream :8766                │ :8123/mcp   │
@@ -429,12 +429,12 @@ TLS: the panel uses `curl -sk` to the companion cert. Browsers that open the com
 
 On `FACE_HOST`, bind **only the LAN NIC** (`BLOUB_BIND` / `BLOUB_PORT`, default `:8766`):
 
-- HTTP `GET /face.mjpeg`, `GET|POST /face?name=`, `GET /health`
+- HTTP `GET /face.jpg` (single baseline JPEG), `GET /face.mjpeg`, `GET|POST /face?name=`, `GET /health`
 - 12 fps JPEG ~720 px, cream `#eceae6` on paper `#1a1a1a`
 - systemd user unit with linger enabled is a good pattern
 - UFW: `8766/tcp` from `LAN_CIDR` only
 
-The panel **must not** open `:8766` from WebKit (sandbox + firewall). `thinksmart-face.py` proxies `GET /bot.mjpeg` with `http.client`. **Do not** `urllib.urlopen` an open MJPEG (it waits for EOF and the UI falls back to the old JPEG face).
+The panel **must not** open `:8766` from WebKit (sandbox + firewall). `thinksmart-face.py` proxies `GET /bot.jpg` (one complete JPEG per request). WebKitGTK 6 does not paint `multipart/x-mixed-replace` in `<img>`, so the glass polls `/bot.jpg` instead of hanging on `/bot.mjpeg`.
 
 Face map: idle→idle, listen→wide, thinking→thinking, speak→notify, error→alert, sleep→sleep.
 
@@ -478,7 +478,7 @@ WebKitGTK 6 on 2 GB RAM:
 
 1. **On-device Vue/IIFE** (removed from this tree). Factory helper cannot be named `el` if `mount(el)` exists — inner `el('svg')` TypeErrors. Use `node(tag, attrs)`.
 2. **Baked poses** (`kiosk-poses.json`): static cream circle + precomputed eyes; idle blink by hiding holes ~140 ms every 3–6 s. Better, still extra JS on the panel.
-3. **Live path:** render bloub on the companion (Node + `sharp`) and **stream MJPEG**. Panel is a dumb `<img src="/bot.mjpeg">`. JPEG stills in `kiosk/faces/` are a short fallback if the stream drops; the page reconnects instead of staying on a still.
+3. **Live path:** render bloub on the companion (Node + `sharp`) and serve **baseline JPEGs**. Panel polls `<img>` via `/bot.jpg`. JPEG stills in `kiosk/faces/` are the fallback if the companion is down.
 
 License file copied next to the kiosk bundle: `kiosk/bloub-LICENSE.txt`.
 

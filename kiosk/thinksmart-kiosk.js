@@ -62,22 +62,11 @@
   let localHold = false;
   let faceMode = "";
   let blinkTimer = 0;
-  let streamOk = true;
+  let streamOk = false;
   let streamErrors = 0;
-  let streamRetry = 0;
+  let prevUrl = "";
+  let polling = false;
   const preloaded = {};
-
-  function streamUrl() {
-    return "/bot.mjpeg?r=" + Date.now();
-  }
-
-  function attachStream() {
-    streamOk = true;
-    streamErrors = 0;
-    stopAnim();
-    faceEl.src = streamUrl();
-    if (faceMode) pushFace(faceMode);
-  }
 
   function preloadUrl(src) {
     if (!src || preloaded[src] || streamOk) return;
@@ -102,10 +91,10 @@
     const schedule = () => {
       const wait = 3200 + Math.floor(Math.random() * 2800);
       blinkTimer = setTimeout(() => {
-        if (faceMode !== name) return;
+        if (faceMode !== name || streamOk) return;
         faceEl.src = blinkSrc;
         blinkTimer = setTimeout(() => {
-          if (faceMode === name) faceEl.src = openSrc;
+          if (faceMode === name && !streamOk) faceEl.src = openSrc;
           schedule();
         }, 140);
       }, wait);
@@ -114,18 +103,14 @@
   }
 
   function pushFace(name) {
-    if (!streamOk) return;
     fetch("/bot/face?name=" + encodeURIComponent(name)).catch(() => {});
   }
 
   function startAnim(name) {
     stopAnim();
     if (stageEl) stageEl.className = name;
-    if (streamOk) {
-      pushFace(name);
-      faceEl.src = streamUrl();
-      return;
-    }
+    pushFace(name);
+    if (streamOk) return;
     if (name === "sleep") {
       faceEl.src = faces.sleep;
       return;
@@ -146,27 +131,31 @@
     else hintEl.textContent = "";
   }
 
-  faceEl.addEventListener("error", () => {
-    if (faceEl.getAttribute("src") && faceEl.src.indexOf("/bot.mjpeg") === -1) return;
-    streamErrors += 1;
-    if (streamErrors < 3) {
-      setTimeout(attachStream, 400);
-      return;
-    }
-    streamOk = false;
-    startIdleBlink(faceMode || "idle");
-    if (streamRetry) return;
-    streamRetry = setTimeout(() => {
-      streamRetry = 0;
-      attachStream();
-    }, 3000);
-  });
-  faceEl.addEventListener("load", () => {
-    if (faceEl.src.indexOf("/bot.mjpeg") !== -1) {
+  async function pollJpg() {
+    if (polling) return;
+    polling = true;
+    try {
+      const res = await fetch("/bot.jpg?r=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) throw new Error("jpg");
+      const blob = await res.blob();
+      if (blob.size < 200) throw new Error("empty");
+      const url = URL.createObjectURL(blob);
+      faceEl.src = url;
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      prevUrl = url;
+      if (!streamOk) stopAnim();
       streamOk = true;
       streamErrors = 0;
+    } catch {
+      streamErrors += 1;
+      if (streamErrors >= 3 && streamOk) {
+        streamOk = false;
+        startIdleBlink(faceMode || "idle");
+      }
+    } finally {
+      polling = false;
     }
-  });
+  }
 
   function playWavB64(b64) {
     if (!b64) return;
@@ -258,6 +247,8 @@
   setFace("idle", "ready", "", "say hey grok, or press to talk");
   tickClock();
   setInterval(tickClock, 1000);
+  pollJpg();
+  setInterval(pollJpg, 120);
   setInterval(async () => {
     if (rec) return;
     try {

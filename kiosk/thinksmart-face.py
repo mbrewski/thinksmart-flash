@@ -51,7 +51,7 @@ VOICE_HOST = os.environ.get("VOICE_HOST", "VOICE_HOST")
 FACE_HOST = os.environ.get("FACE_HOST", VOICE_HOST)
 CLOCK_TZ = os.environ.get("CLOCK_TZ", os.environ.get("TZ", "UTC"))
 PORT = 1680
-URL = f"http://127.0.0.1:{PORT}/thinksmart-kiosk.html?v=35"
+URL = f"http://127.0.0.1:{PORT}/thinksmart-kiosk.html?v=36"
 TURN_URL = os.environ.get("TURN_URL", f"https://{VOICE_HOST}:8765/api/turn")
 RESET_URL = os.environ.get("RESET_URL", f"https://{VOICE_HOST}:8765/api/reset")
 REC_WAV = "/tmp/kiosk-rec.wav"
@@ -609,6 +609,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith("/state"):
             self._json(200, dict(_state))
             return
+        if self.path.startswith("/bot.jpg"):
+            self._proxy_jpg()
+            return
         if self.path.startswith("/bot.mjpeg"):
             self._proxy_mjpeg()
             return
@@ -642,6 +645,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(502, {"ok": False})
             return
         self._json(200, {"ok": True})
+
+    def _proxy_jpg(self):
+        conn = None
+        try:
+            parsed = urllib.parse.urlparse(FACE_STREAM)
+            conn = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=2)
+            conn.request("GET", "/face.jpg")
+            upstream = conn.getresponse()
+            data = upstream.read()
+            if upstream.status != 200 or not data:
+                self.send_error(502, "face snapshot down")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            super(http.server.SimpleHTTPRequestHandler, self).end_headers()
+            self.wfile.write(data)
+        except OSError:
+            try:
+                self.send_error(502, "face snapshot down")
+            except OSError:
+                pass
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
 
     def _proxy_mjpeg(self):
         conn = None
